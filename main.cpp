@@ -7,10 +7,9 @@ Uses MARL framework.
 
 #include "snake.h"
 
-// states and dq are too big to be defined in the Trainer class, so they are defined outside.
-Environment states[maxStates];
+// dq is too big to be defined in the Trainer class, so it is defined outside.
 DataQueue dq;
-Trainer t(states, &dq);
+Trainer t(&dq);
 
 unsigned long start_time;
 
@@ -34,12 +33,14 @@ void run_trial(int size){
 
 
 void standardSetup(Agent& net){
-    net.initInput(6, 6, 6, 5, 5);
-    net.addConvLayer(9, 6, 6, 5, 5);
-    net.addPoolLayer(9, 3, 3);
-    net.addDenseLayer(60);
+    net.initInput(6, 10, 10, 5, 5);
+    net.addConvLayer(9, 10, 10, 5, 5);
+    net.addPoolLayer(9, 5, 5);
+    net.addConvLayer(9, 5, 5, 5, 5);
+    net.addDenseLayer(150);
     net.addDenseLayer(1);
     net.quickSetup();
+    net.randomize(0.2);
 }
 
 void testNet(){
@@ -53,7 +54,7 @@ void testNet(){
     }
     for(int i=0; i<3; i++){
         for(int j=0; j<2; j++){
-            net.input->pos[i][j] = rand() % 6;
+            net.input->pos[i][j] = rand() % boardx;
         }
         net.input->param[i] = (double) rand() / RAND_MAX;
     }
@@ -78,25 +79,38 @@ void testNet(){
 
 void trainCycle(){
     standardSetup(t.a);
+    t.a.readNet("snakeConv.in");
     const int storePeriod = 50;
     
     dq.index = 0;
-    dq.learnRate = 0.03;
     dq.momentum = 0.9;
     
-    t.a.maxValue = 0;
-    
+    cout<<"Reading games\n";
+    int maxScore = dq.readGames(); // read games from games.in file.
+    cout<<"Finished reading " << dq.index << " games\n";
     double sum = 0;
     int completions = 0;
+    
+    string gameLog = "gameLog.out";
+    ofstream hold(gameLog);
+    hold.close();
+    t.gameLog = gameLog;
+    
     for(int i=0; i<=numGames; i++){
-        double score = t.trainTree();
-        cout<<score<<' ';
-        
-        if(score >= 40){
-            dq.learnRate = min(dq.learnRate, 0.01);
+        if(i >= 0){
+            t.hard_code = false;
         }
+        ofstream fout(gameLog, ios::app);
+        fout<<"Game "<<i<<' '<<time(NULL)<<'\n';
+        fout.close();
+        double score = t.trainTree();
+        cout<<i<<':'<<score<<' ';
+        maxScore = max(maxScore, score);
         
-        t.a.maxValue = max(t.a.maxValue, score);
+        dq.learnRate = 0.002 / (1 + maxScore);
+        if(maxScore >= 100){
+            dq.learnRate = 0.001 / (1 + maxScore);
+        }
         
         sum += score;
         if(score >= 40){
@@ -120,11 +134,12 @@ void trainCycle(){
 void evaluate(){
     standardSetup(t.a);
     t.a.readNet("snakeConv.in");
-    t.evaluate();
+    t.hard_code = false;
+    //t.evaluate();
     
     ofstream fout4(outAddress);
     fout4.close();
-    for(int i=0; i<10; i++){
+    for(int i=0; i<1; i++){
         ofstream fout(outAddress, ios::app);
         fout<<"Printed game "<<i<<'\n';
         fout.close();
@@ -135,6 +150,7 @@ void evaluate(){
 void exportGames(){
     standardSetup(t.a);
     t.a.readNet("snakeConv.in");
+    t.hard_code = false;
     t.exportGame();
 }
 

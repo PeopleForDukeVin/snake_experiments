@@ -88,14 +88,34 @@ bool Environment::validChanceAction(int pos){
     return snake[newApplex][newAppley] == -1;
 }
 
-void Environment::setAction(Environment* currState, int actionIndex){
-    copyEnv(currState);
-    if(currState->actionType == 0){
+void Environment::makeAction(int actionIndex){
+    if(actionType == 0){
         agentAction(actionIndex);
     }
-    if(currState->actionType == 1){
+    else{
         chanceAction(actionIndex);
     }
+    
+    // Unfold path
+    while(actionType == 0 && !isEndState()){
+        int nextAction = -1;
+        for(int i=0; i<numAgentActions; i++){
+            if(validAction(i)){
+                if(nextAction == -1){
+                    nextAction = i;
+                }
+                else{
+                    return;
+                }
+            }
+        }
+        agentAction(nextAction);
+    }
+}
+
+void Environment::setAction(Environment* currState, int actionIndex){
+    copyEnv(currState);
+    makeAction(actionIndex);
 }
 
 void Environment::agentAction(int actionIndex){
@@ -120,22 +140,6 @@ void Environment::agentAction(int actionIndex){
         tailx += dir[tailDir][0];
         taily += dir[tailDir][1];
     }
-    
-    // Unfold path
-    if(actionType == 1) return;
-    if(isEndState()) return; // checks if time limit has been reached.
-    int nextAction = -1;
-    for(int i=0; i<numAgentActions; i++){
-        if(validAction(i)){
-            if(nextAction == -1){
-                nextAction = i;
-            }
-            else{
-                return;
-            }
-        }
-    }
-    agentAction(nextAction);
 }
 
 void Environment::chanceAction(int actionIndex){

@@ -70,10 +70,11 @@ void Layer::updateParameters(double mult, double momentum){
         sum += squ(params[i]);
     }
     //cout<<"Param sum: "<<sum<<'\n';
+    /*
     if(sum <= maxNorm) return;
     for(int i=0; i<numParams; i++){
         params[i] *= sqrt(maxNorm / sum);
-    }
+    }*/
 }
 
 void Layer::save(){
@@ -339,7 +340,7 @@ void Agent::resetGradient(){
 
 void Agent::backProp(){
     pass();
-    Dbias[numLayers-1][0] = 2 * (activation[numLayers][0] - expected) * dinvnonlinear(activation[numLayers][0]) / (1+maxValue);
+    Dbias[numLayers-1][0] = 2 * (activation[numLayers][0] - expected) * dinvnonlinear(activation[numLayers][0]);
     for(int l=numLayers-1; l>0; l--){
         layers[l]->accumulateGradient(activation[l], Dbias[l]);
         layers[l]->backProp(activation[l], Dbias[l-1], Dbias[l]);
@@ -387,6 +388,5 @@ void Agent::quickSetup(){
         layers[l]->netIn = &netIn;
         layers[l]->netOut = &netOut;
     }
-    randomize(0.3);
     resetGradient();
 }

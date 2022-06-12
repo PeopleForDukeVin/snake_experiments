@@ -9,171 +9,186 @@
 
 
 
-void Trainer::initializeNode(int currNode){
-    for(int i=0; i<numActions[states[currNode].actionType]; i++){
-        if(!states[currNode].validAction(i)){
+void Trainer::initializeNode(Environment& env, int currNode){
+    if(outcomes[currNode] != NULL){
+        delete outcomes[currNode];
+    }
+    int numOutcomes = numActions[env.actionType];
+    outcomes[currNode] = new int[numOutcomes];
+    for(int i=0; i<numOutcomes; i++){
+        if(!env.validAction(i)){
             outcomes[currNode][i] = -2;
         }
         else{
             outcomes[currNode][i] = -1;
         }
     }
-    size[currNode] = 0;
+    subtreeSize[currNode] = 0;
     sumScore[currNode] = 0;
 }
 
 double Trainer::trainTree(){
-    states[0].initialize();
-    initializeNode(0);
-    currRoot = 0;
-    roots[0] = 0;
+    roots[0].initialize();
+    rootIndex = 0;
+    ofstream fout(gameLog, ios::app);
+    fout<<(roots[0].applex * boardy + roots[0].appley)<<',';
+    initializeNode(roots[0], 0);
     index = 1;
     
-    int s = 0;
     int chosenAction;
-    int i;
-    while(!states[currRoot].isEndState()){
-        if(states[currRoot].actionType == 0){
-            for(i=0; i<numPaths; i++){
+    for(rootState=0; rootState<maxTime*2; rootState++){
+        if(roots[rootState].actionType == 0){
+            for(int j=0; j<numPaths; j++){
                 expandPath();
             }
             computeActionProbs();
             chosenAction = sampleActionProbs();
         }
-        if(states[currRoot].actionType == 1){
-            chosenAction = getRandomChanceAction(&states[currRoot]);
-            if(outcomes[currRoot][chosenAction] == -1){
-                outcomes[currRoot][chosenAction] = index;
-                states[index].setAction(&states[currRoot], chosenAction);
-                initializeNode(index);
+        else{
+            chosenAction = getRandomChanceAction(&roots[rootState]);
+            if(outcomes[rootIndex][chosenAction] == -1){
+                outcomes[rootIndex][chosenAction] = index;
+                Environment env;
+                env.setAction(&roots[rootState], chosenAction);
+                initializeNode(env, index);
                 index++;
             }
         }
-        currRoot = outcomes[currRoot][chosenAction];
-        s++;
-        roots[s] = currRoot;
+        roots[rootState+1].setAction(&roots[rootState], chosenAction);
+        rootIndex = outcomes[rootIndex][chosenAction];
+        if(roots[rootState+1].isEndState()){
+            fout<<chosenAction;
+            break;
+        }
+        else{
+            fout<<chosenAction<<',';
+        }
     }
-    int numStates = s+1;
-    double finalScore = states[currRoot].getScore();
-    for(i=0; i<numStates; i++){
-        dq->enqueue(new Data(&states[roots[i]], finalScore));
+    fout<<'\n';
+    fout.close();
+    int numStates = rootState;
+    Data* game = new Data[numStates];
+    double finalScore = roots[numStates-1].getScore();
+    for(int i=0; i<numStates; i++){
+        game[i] = Data(&roots[i], finalScore);
     }
+    dq->enqueue(game, numStates);
     return finalScore;
 }
 
-int Trainer::evalGame(){ // return index of the final state in states.
-    states[0].initialize();
-    initializeNode(0);
-    currRoot = 0;
-    roots[0] = 0;
+int Trainer::evalGame(){ // return index of the final state in roots = numStates - 1.
+    roots[0].initialize();
+    rootIndex = 0;
+    initializeNode(roots[0], 0);
     index = 1;
     
-    int s = 0;
     int chosenAction;
-    int i;
-    while(!states[currRoot].isEndState()){
-        if(states[currRoot].actionType == 0){
-            for(i=0; i<numPaths; i++){
+    for(rootState=0; rootState<maxTime*2; rootState++){
+        if(roots[rootState].actionType == 0){
+            for(int j=0; j<numPaths; j++){
                 expandPath();
             }
             computeActionProbs();
-            chosenAction = sampleActionProbs();
+            chosenAction = optActionProbs();
         }
-        if(states[currRoot].actionType == 1){
-            chosenAction = getRandomChanceAction(&states[currRoot]);
-            if(outcomes[currRoot][chosenAction] == -1){
-                outcomes[currRoot][chosenAction] = index;
-                states[index].setAction(&states[currRoot], chosenAction);
-                initializeNode(index);
+        else{
+            chosenAction = getRandomChanceAction(&roots[rootState]);
+            if(outcomes[rootIndex][chosenAction] == -1){
+                outcomes[rootIndex][chosenAction] = index;
+                Environment env;
+                env.setAction(&roots[rootState], chosenAction);
+                initializeNode(env, index);
                 index++;
             }
         }
-        currRoot = outcomes[currRoot][chosenAction];
-        s++;
-        roots[s] = currRoot;
+        roots[rootState+1].setAction(&roots[rootState], chosenAction);
+        rootIndex = outcomes[rootIndex][chosenAction];
+        if(roots[rootState+1].isEndState()){
+            break;
+        }
     }
-    return currRoot;
+    int numStates = rootState;
+    return numStates - 1;
 }
 
 void Trainer::printGame(){
-    states[0].initialize();
-    initializeNode(0);
-    currRoot = 0;
-    roots[0] = 0;
+    roots[0].initialize();
+    rootIndex = 0;
+    initializeNode(roots[0], 0);
     index = 1;
     
-    int s = 0;
     int chosenAction;
-    int i;
-    while(!states[currRoot].isEndState()){
-        states[currRoot].print();
-        if(states[currRoot].actionType == 0){
-            for(i=0; i<numPaths; i++){
+    for(rootState=0; rootState<maxTime*2; rootState++){
+        roots[rootState].print();
+        if(roots[rootState].actionType == 0){
+            for(int j=0; j<numPaths; j++){
                 expandPath();
             }
             computeActionProbs();
             ofstream fout(outAddress, ios::app);
             fout<<"Action probabilities: ";
-            for(i=0; i<numAgentActions; i++){
+            for(int i=0; i<numAgentActions; i++){
                 fout<<actionProbs[i]<<' ';
             }
             fout<<"\n\n";
             fout.close();
             chosenAction = optActionProbs();
         }
-        if(states[currRoot].actionType == 1){
-            chosenAction = getRandomChanceAction(&states[currRoot]);
-            if(outcomes[currRoot][chosenAction] == -1){
-                outcomes[currRoot][chosenAction] = index;
-                states[index].setAction(&states[currRoot], chosenAction);
-                initializeNode(index);
+        else{
+            chosenAction = getRandomChanceAction(&roots[rootState]);
+            if(outcomes[rootIndex][chosenAction] == -1){
+                outcomes[rootIndex][chosenAction] = index;
+                Environment env;
+                env.setAction(&roots[rootState], chosenAction);
+                initializeNode(env, index);
                 index++;
             }
         }
-        currRoot = outcomes[currRoot][chosenAction];
-        s++;
-        roots[s] = currRoot;
+        roots[rootState+1].setAction(&roots[rootState], chosenAction);
+        rootIndex = outcomes[rootIndex][chosenAction];
+        if(roots[rootState+1].isEndState()){
+            break;
+        }
     }
 }
 
 void Trainer::exportGame(){
-    states[0].initialize();
-    cout<<(states[0].applex * boardy + states[0].appley)<<',';
-    initializeNode(0);
-    currRoot = 0;
-    roots[0] = 0;
+    roots[0].initialize();
+    cout<<(roots[0].applex * boardy + roots[0].appley)<<',';
+    rootIndex = 0;
+    initializeNode(roots[0], 0);
     index = 1;
     
-    int s = 0;
     int chosenAction;
-    int i;
-    while(!states[currRoot].isEndState()){
-        if(states[currRoot].actionType == 0){
-            for(i=0; i<numPaths; i++){
+    for(rootState=0; rootState<maxTime*2; rootState++){
+        if(roots[rootState].actionType == 0){
+            for(int j=0; j<numPaths; j++){
                 expandPath();
             }
             computeActionProbs();
             chosenAction = optActionProbs();
         }
-        if(states[currRoot].actionType == 1){
-            chosenAction = getRandomChanceAction(&states[currRoot]);
-            if(outcomes[currRoot][chosenAction] == -1){
-                outcomes[currRoot][chosenAction] = index;
-                states[index].setAction(&states[currRoot], chosenAction);
-                initializeNode(index);
+        else{
+            chosenAction = getRandomChanceAction(&roots[rootState]);
+            if(outcomes[rootIndex][chosenAction] == -1){
+                outcomes[rootIndex][chosenAction] = index;
+                Environment env;
+                env.setAction(&roots[rootState], chosenAction);
+                initializeNode(env, index);
                 index++;
             }
         }
-        currRoot = outcomes[currRoot][chosenAction];
-        s++;
-        roots[s] = currRoot;
-        if(states[currRoot].isEndState()){
-            cout<<chosenAction<<'\n';
+        roots[rootState+1].setAction(&roots[rootState], chosenAction);
+        rootIndex = outcomes[rootIndex][chosenAction];
+        if(roots[rootState+1].isEndState()){
+            cout<<chosenAction;
+            break;
         }
         else{
             cout<<chosenAction<<',';
         }
     }
+    cout<<'\n';
 }
 
 
@@ -183,48 +198,48 @@ double Trainer::evaluate(){
     double sizeSum = 0;
     double scoreSquareSum = 0;
     int numCompletes = 0;
+    int timeSum = 0;
     for(int i=0; i<numEvalGames; i++){
         endState = evalGame();
-        cout<<states[endState].getScore()<<' ';
-        scoreSum += states[endState].getScore();
-        sizeSum += states[endState].snakeSize;
-        scoreSquareSum += squ(states[endState].getScore());
-        if(states[endState].snakeSize == boardx * boardy){
+        cout<<roots[endState].getScore()<<' ';
+        scoreSum += roots[endState].getScore();
+        sizeSum += roots[endState].snakeSize;
+        scoreSquareSum += squ(roots[endState].getScore());
+        if(roots[endState].snakeSize == boardx * boardy){
             numCompletes++;
+            timeSum += roots[endState].timer;
         }
     }
     double averageScore = scoreSum / numEvalGames;
     double variance = scoreSquareSum / numEvalGames - squ(averageScore);
     double SE = sqrt(variance / numEvalGames) * evalZscore;
-    cout<<"Average snake size: "<<(sizeSum/numEvalGames)<<'\n';
+    cout<<"\nAverage snake size: "<<(sizeSum/numEvalGames)<<'\n';
     cout<<"Average score: "<<averageScore<<'\n';
     cout<<"Confidence interval: (" << (averageScore - SE) << ", " << (averageScore + SE) << ")\n";
     cout<<"Proportion of completions: "<<((double) numCompletes / numEvalGames)<<'\n';
+    cout<<"Average time to completion: "<<((double) timeSum / numCompletes)<<'\n';
     cout<<'\n';
     return averageScore;
 }
 
 void Trainer::expandPath(){
-    //cout<<"New path at "<<currRoot<<'\n';
-    int currNode = currRoot;
+    int currNode = rootIndex;
     int nextNode,nextAction;
     int count = 0;
     int currType;
     int maxIndex;
     double maxVal,candVal;
     int i;
-    while(currNode != -1 && !states[currNode].isEndState()){
-        //fout<<"Checking state:\n";
-        //states[currNode].print();
+    Environment env;
+    env.copyEnv(&roots[rootState]);
+    while(currNode != -1 && !env.isEndState()){
         path[count] = currNode;
         count++;
         maxVal = -1000000;
-        currType = states[currNode].actionType;
-        //fout<<"Checking actions:\n";
+        currType = env.actionType;
         for(i=0; i<numActions[currType]; i++){
             nextNode = outcomes[currNode][i];
             if(nextNode == -2){
-                //fout<<"No ";
                 continue;
             }
             if(nextNode == -1){
@@ -232,32 +247,37 @@ void Trainer::expandPath(){
             }
             else{
                 if(currType == 0){
-                    candVal = sumScore[nextNode] / size[nextNode] + 0.5 * log(size[currNode]) / sqrt(size[nextNode]);
+                    candVal = sumScore[nextNode] / subtreeSize[nextNode] + explorationConstant * log(subtreeSize[currNode]) / sqrt(subtreeSize[nextNode]);
                 }
                 if(currType == 1){
-                    candVal = (double)rand() / RAND_MAX - size[nextNode];
+                    candVal = (double)rand() / RAND_MAX - subtreeSize[nextNode];
                 }
             }
-            //fout<<candVal<<' ';
             if(candVal > maxVal){
                 maxVal = candVal;
                 maxIndex = i;
             }
         }
-        //fout<<"Best Action: "<<maxIndex<<"\n\n";
         nextAction = maxIndex;
         currNode = outcomes[currNode][maxIndex];
+        env.makeAction(maxIndex);
     }
     double newVal;
     if(currNode == -1){
         outcomes[path[count-1]][nextAction] = index;
-        states[index].setAction(&states[path[count-1]], nextAction);
-        initializeNode(index);
-        //fout<<"New state:\n";
-        //states[index].print();
-        states[index].inputSymmetric(a.input, rand()%8);
-        a.pass();
-        newVal = a.output;
+        initializeNode(env, index);
+        if(hard_code){
+            newVal = env.snakeSize - env.actionType;
+            newVal += (maxTime - env.timer) * 0.05;
+            newVal -= (abs(env.headx - env.applex)) * 0.05;
+            newVal -= (abs(env.heady - env.appley)) * 0.05;
+        }
+        else{
+            env.inputSymmetric(a.input, rand()%8);
+            a.pass();
+            newVal = a.output;
+        }
+        
         assert(abs(newVal) < 1000);
         path[count] = index;
         index++;
@@ -278,18 +298,18 @@ void Trainer::expandPath(){
         */
     }
     else{
-        newVal = states[currNode].getScore();
+        newVal = env.getScore();
         path[count] = currNode;
         count++;
     }
-    //fout<<"Evaluated at "<<newVal<<'\n';
     for(i=0; i<count; i++){
-        size[path[i]]++;
+        subtreeSize[path[i]]++;
         sumScore[path[i]] += newVal;
     }
 }
 
 void Trainer::printTree(){
+    /*
     ofstream fout(outAddress, ios::app);
     for(int i=0; i<index; i++){
         fout<<"State "<<i<<'\n';
@@ -303,16 +323,16 @@ void Trainer::printTree(){
         fout<<"Sum score: "<<sumScore[i]<<'\n';
         fout<<'\n';
     }
-    fout.close();
+    fout.close();*/
 }
 
 void Trainer::computeActionProbs(){
     int i;
     int nextIndex;
     for(i=0; i<numAgentActions; i++){
-        nextIndex = outcomes[currRoot][i];
+        nextIndex = outcomes[rootIndex][i];
         if(nextIndex != -2){
-            actionProbs[i] = squ(size[nextIndex]);
+            actionProbs[i] = pow(subtreeSize[nextIndex], 2); // squ(size[nextIndex]);
         }
         else{
             actionProbs[i] = -1;

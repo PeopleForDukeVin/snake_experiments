@@ -20,9 +20,9 @@ using namespace std;
 
 //environment details
 
-#define boardx 6
-#define boardy 6
-#define maxTime 200
+#define boardx 10
+#define boardy 10
+#define maxTime 1000
 
 #define numAgentActions 4
 #define numChanceActions (boardx*boardy)
@@ -31,14 +31,16 @@ using namespace std;
 //training deatils
 
 #define maxNorm 100
-#define batchSize 3000
+#define batchSize 10000
 
-#define scoreNorm 5
+#define scoreNorm 10
 #define numBatches 1
-#define queueSize 160000
+#define queueSize 1000
 
-#define numGames 3000
-#define numPaths 800
+#define numGames 4000
+#define numPaths 400
+#define explorationConstant 1
+
 #define maxStates (maxTime*2*numPaths)
 #define evalPeriod 100
 #define numEvalGames 100
@@ -188,7 +190,6 @@ public:
     double** activation;
     double** Dbias;
     
-    int maxValue; // to normalize the output value
     double output;
     double expected;
     
@@ -244,13 +245,13 @@ public:
     bool validAction(int actionIndex); // returns whether the action is valid.
     bool validAgentAction(int d);
     bool validChanceAction(int pos);
+    void makeAction(int actionIndex);
     void setAction(Environment* currState, int actionIndex);
     void inputSymmetric(networkInput* a, int t);
     void copyEnv(Environment* e);
     void print();// optional function for debugging
     void log();// optional function for debugging
     
-private:
     void agentAction(int actionIndex);
     void chanceAction(int actionIndex);
 };
@@ -262,6 +263,7 @@ public:
     Environment e;
     double expectedValue;
     
+    Data(){}
     Data(Environment* givenEnv, double givenExpected);
     void trainAgent(Agent* a);
 };
@@ -269,43 +271,51 @@ public:
 class DataQueue{
 public:
     Data* queue[queueSize];
+    int gameLengths[queueSize];
     int index;
     double learnRate, momentum;
     
     DataQueue();
-    void enqueue(Data* d);
+    void enqueue(Data* d, int gameLength);
     void trainAgent(Agent* a);
+    int readGames(); // returns the maximum score out of the games read.
 };
 
 // Trainer
 
-
 class Trainer{
 public:
-    Environment* states;
     DataQueue* dq;
+    
+    bool hard_code = true;
     
     Agent a;
     double exploitationFactor;
     
-    Trainer(Environment* givenStates, DataQueue* givendq){
-        states = givenStates;
+    string gameLog;
+    
+    Trainer(DataQueue* givendq){
         dq = givendq;
         exploitationFactor = 1;
+        for(int i=0; i<maxStates; i++){
+            outcomes[i] = NULL;
+        }
     }
     
     //Storage for the tree:
-    int outcomes[maxStates][maxNumActions];
-    int size[maxStates];
+    int* outcomes[maxStates];
+    int subtreeSize[maxStates];
     double sumScore[maxStates];
-    int index;
+    Environment roots[maxTime*2];
     
-    //For executing a training iteration:
-    int roots[maxStates];
-    int currRoot;
+    // Implementing the tree search
+    int index;
+    int rootIndex, rootState;
+    
+    // For executing a training iteration:
     double actionProbs[numAgentActions];
     
-    void initializeNode(int currNode);
+    void initializeNode(Environment& env, int currNode);
     double trainTree();
     int evalGame();// return index of the final state in states.
     void printGame();
